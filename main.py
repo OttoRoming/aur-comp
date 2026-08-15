@@ -103,6 +103,8 @@ async def main_loop() -> None:
 
 async def main() -> None:
     await db.init()
+    await db.clear_building_flags()
+    await db.commit()
 
     package_count = await db.get_package_count()
     if package_count == 0:

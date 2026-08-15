@@ -36,7 +36,7 @@ async def subprocess(args: list[str], cwd: str | None = None) -> None:
         print(f"[stderr] {line}")
 
 
-async def _path_exists(path: str) -> bool:
+async def path_exists(path: str) -> bool:
     try:
         await aos.stat(path)
         return True
@@ -46,7 +46,7 @@ async def _path_exists(path: str) -> bool:
 
 async def setup() -> None:
     # delete everything in WORK_DIR
-    if await _path_exists(WORK_DIR):
+    if await path_exists(WORK_DIR):
         for item in await aos.listdir(WORK_DIR):
             item_path = os.path.join(WORK_DIR, item)
             if await aos.path.isdir(item_path):
@@ -64,7 +64,7 @@ async def fetch_base(name: str) -> None:
     package_dir = os.path.join(SOURCES_DIR, name)
     await aos.makedirs(package_dir, exist_ok=True)
 
-    if await _path_exists(os.path.join(package_dir, ".git")):
+    if await path_exists(os.path.join(package_dir, ".git")):
         await subprocess(["git", "pull"], cwd=package_dir)
     else:
         git_url = f"https://aur.archlinux.org/{name}.git"
@@ -139,13 +139,13 @@ async def build_base(base: Base) -> None:
 
         extension = ".pkg.tar.lz"
 
-        if await _path_exists(
+        if await path_exists(
             os.path.join(
                 build_base_dir, f"{package.name}-{base.version}-x86_64{extension}"
             )
         ):
             arch = "x86_64"
-        elif await _path_exists(
+        elif await path_exists(
             os.path.join(
                 build_base_dir, f"{package.name}-{base.version}-any{extension}"
             )

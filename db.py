@@ -210,6 +210,15 @@ async def update_tracker(tracker: Tracker):
     )
 
 
+async def clear_building_flags() -> None:
+    await db.execute(
+        """
+        UPDATE tracker
+        SET building = 0
+    """
+    )
+
+
 async def get_packages_building() -> list[Package]:
     async with db.execute(
         """
