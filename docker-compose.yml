@@ -1,0 +1,28 @@
+services:
+  main:
+    build:
+      context: .
+      dockerfile: Dockerfile.main
+    container_name: main
+    volumes:
+      - ./data/work:/app/work
+      - ./data/bin:/app/bin
+      - ./data/store:/app/store
+      - ./data/ssh:/root/.ssh
+    depends_on:
+      - builder
+    ports:
+      - "5000:80"
+    command: python3 main.py
+
+  builder:
+    build:
+      context: .
+      dockerfile: Dockerfile.builder
+    container_name: builder
+    volumes:
+      - ./data/work:/home/builder/work
+
+    command: >
+      sh -c "chown -R builder:builder /home/builder/work &&
+             exec /usr/sbin/sshd -D"

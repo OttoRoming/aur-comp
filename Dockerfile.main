@@ -1,0 +1,26 @@
+FROM archlinux:latest
+
+RUN pacman -Syu --noconfirm
+
+RUN pacman-key --init
+
+RUN pacman -S --noconfirm --needed \
+    python \
+    python-requests \
+    python-flask \
+    python-paramiko \
+    git
+
+RUN pacman-db-upgrade
+RUN update-ca-trust
+
+RUN pacman -Scc --noconfirm
+
+WORKDIR /app
+
+RUN mkdir -p /root/.ssh
+RUN chmod 700 /root/.ssh
+
+COPY . /app
+
+CMD ["python", "main.py"]
