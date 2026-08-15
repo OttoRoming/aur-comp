@@ -4,6 +4,7 @@ import shutil
 import sys
 from typing import Literal
 
+import aiofiles.os as aos
 import paramiko
 
 import db
@@ -35,27 +36,35 @@ async def subprocess(args: list[str], cwd: str | None = None) -> None:
         print(f"[stderr] {line}")
 
 
-def setup() -> None:
+async def _path_exists(path: str) -> bool:
+    try:
+        await aos.stat(path)
+        return True
+    except FileNotFoundError:
+        return False
+
+
+async def setup() -> None:
     # delete everything in WORK_DIR
-    if os.path.exists(WORK_DIR):
-        for item in os.listdir(WORK_DIR):
+    if await _path_exists(WORK_DIR):
+        for item in await aos.listdir(WORK_DIR):
             item_path = os.path.join(WORK_DIR, item)
-            if os.path.isdir(item_path):
-                shutil.rmtree(item_path)
+            if await aos.path.isdir(item_path):
+                await asyncio.to_thread(shutil.rmtree, item_path)
             else:
-                os.remove(item_path)
+                await aos.remove(item_path)
 
-    os.makedirs(SOURCES_DIR, mode=0o777)
-    os.makedirs(BUILD_DIR, mode=0o777)
+    await aos.makedirs(SOURCES_DIR, mode=0o777, exist_ok=True)
+    await aos.makedirs(BUILD_DIR, mode=0o777, exist_ok=True)
 
-    os.makedirs(BIN_DIR, mode=0o777, exist_ok=True)
+    await aos.makedirs(BIN_DIR, mode=0o777, exist_ok=True)
 
 
 async def fetch_base(name: str) -> None:
     package_dir = os.path.join(SOURCES_DIR, name)
-    os.makedirs(package_dir, exist_ok=True)
+    await aos.makedirs(package_dir, exist_ok=True)
 
-    if os.path.exists(os.path.join(package_dir, ".git")):
+    if await _path_exists(os.path.join(package_dir, ".git")):
         await subprocess(["git", "pull"], cwd=package_dir)
     else:
         git_url = f"https://aur.archlinux.org/{name}.git"
@@ -69,9 +78,10 @@ async def build_base(base: Base) -> None:
     build_base_dir = os.path.join(BUILD_DIR, base.name)
     source_base_dir = os.path.join(SOURCES_DIR, base.name)
 
-    shutil.rmtree(build_base_dir, ignore_errors=True)
+    await asyncio.to_thread(shutil.rmtree, build_base_dir, True)
 
-    shutil.copytree(
+    await asyncio.to_thread(
+        shutil.copytree,
         source_base_dir,
         build_base_dir,
     )
@@ -129,13 +139,13 @@ async def build_base(base: Base) -> None:
 
         extension = ".pkg.tar.lz"
 
-        if os.path.exists(
+        if await _path_exists(
             os.path.join(
                 build_base_dir, f"{package.name}-{base.version}-x86_64{extension}"
             )
         ):
             arch = "x86_64"
-        elif os.path.exists(
+        elif await _path_exists(
             os.path.join(
                 build_base_dir, f"{package.name}-{base.version}-any{extension}"
             )
@@ -144,7 +154,8 @@ async def build_base(base: Base) -> None:
         else:
             raise Exception(f"Package {package.name} not found in build directory")
 
-        shutil.move(
+        await asyncio.to_thread(
+            shutil.move,
             os.path.join(
                 build_base_dir, f"{package.name}-{base.version}-{arch}{extension}"
             ),
