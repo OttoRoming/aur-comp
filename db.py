@@ -144,7 +144,8 @@ async def get_next_unbuilt() -> Tuple[Tracker, Base]:
             b.out_of_date IS NULL AND
             b.num_votes > 100 AND
             b.name NOT LIKE '%-bin' AND
-            b.name NOT LIKE '%-git'
+            b.name NOT LIKE '%-git' AND
+            b.name NOT LIKE '%-nightly'
 
             ORDER BY b.num_votes DESC, b.popularity DESC
             LIMIT 1
