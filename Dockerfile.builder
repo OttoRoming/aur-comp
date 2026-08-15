@@ -8,6 +8,7 @@ RUN pacman -S --noconfirm --needed \
     archlinux-keyring \
     sudo \
     git \
+    lzip \
     openssh
 
 RUN pacman-db-upgrade
