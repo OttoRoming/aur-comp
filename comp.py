@@ -4,8 +4,8 @@ import shutil
 import sys
 from typing import Literal
 
-import aiofiles.os as aos
 import paramiko
+from aiofiles import os as aos
 
 import db
 from common import ROOT_DIR
@@ -35,18 +35,9 @@ async def subprocess(args: list[str], cwd: str | None = None) -> None:
     for line in stderr.decode().splitlines():
         print(f"[stderr] {line}")
 
-
-async def path_exists(path: str) -> bool:
-    try:
-        await aos.stat(path)
-        return True
-    except FileNotFoundError:
-        return False
-
-
 async def setup() -> None:
     # delete everything in WORK_DIR
-    if await path_exists(WORK_DIR):
+    if await aos.path.exists(WORK_DIR):
         for item in await aos.listdir(WORK_DIR):
             item_path = os.path.join(WORK_DIR, item)
             if await aos.path.isdir(item_path):
@@ -64,7 +55,7 @@ async def fetch_base(name: str) -> None:
     package_dir = os.path.join(SOURCES_DIR, name)
     await aos.makedirs(package_dir, exist_ok=True)
 
-    if await path_exists(os.path.join(package_dir, ".git")):
+    if await aos.path.exists(os.path.join(package_dir, ".git")):
         await subprocess(["git", "pull"], cwd=package_dir)
     else:
         git_url = f"https://aur.archlinux.org/{name}.git"
@@ -80,7 +71,7 @@ async def build_base(base: Base) -> None:
 
     await asyncio.to_thread(shutil.rmtree, build_base_dir, True)
 
-    await asyncio.to_thread(
+    _ = await asyncio.to_thread(
         shutil.copytree,
         source_base_dir,
         build_base_dir,
@@ -116,13 +107,13 @@ async def build_base(base: Base) -> None:
     while True:
         if channel.recv_ready():
             data = channel.recv(1024).decode("utf-8", errors="ignore")
-            sys.stdout.write(data)
-            sys.stdout.flush()
+            _ = sys.stdout.write(data)
+            _ = sys.stdout.flush()
 
         if channel.recv_stderr_ready():
             err_data = channel.recv_stderr(1024).decode("utf-8", errors="ignore")
-            sys.stderr.write(err_data)
-            sys.stderr.flush()
+            _ = sys.stderr.write(err_data)
+            _ = sys.stderr.flush()
 
         if (
             channel.exit_status_ready()
@@ -135,17 +126,17 @@ async def build_base(base: Base) -> None:
 
     packages = await db.get_packages_from_base_name(base.name)
     for package in packages:
-        arch: Literal["x86_64"] | Literal["any"]
+        arch: Literal["x86_64", "any"]
 
         extension = ".pkg.tar.lz"
 
-        if await path_exists(
+        if await aos.path.exists(
             os.path.join(
                 build_base_dir, f"{package.name}-{base.version}-x86_64{extension}"
             )
         ):
             arch = "x86_64"
-        elif await path_exists(
+        elif await aos.path.exists(
             os.path.join(
                 build_base_dir, f"{package.name}-{base.version}-any{extension}"
             )
@@ -154,7 +145,7 @@ async def build_base(base: Base) -> None:
         else:
             raise Exception(f"Package {package.name} not found in build directory")
 
-        await asyncio.to_thread(
+        _ = await asyncio.to_thread(
             shutil.move,
             os.path.join(
                 build_base_dir, f"{package.name}-{base.version}-{arch}{extension}"
