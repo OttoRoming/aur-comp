@@ -7,8 +7,7 @@ services:
     volumes:
       - ./data/work:/app/work
       - ./data/bin:/app/bin
-      - ./data/store:/app/store
-      - ./data/ssh:/root/.ssh
+      - ./data/database:/app/database
     depends_on:
       - builder
     ports:

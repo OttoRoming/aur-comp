@@ -1,17 +1,38 @@
+import asyncio
 import os
 import shutil
-import subprocess
 import sys
-import time
+from typing import Literal
 
 import paramiko
 
-from common import ROOT_DIR, PackageInfo
+import db
+from common import ROOT_DIR
+from models import Base
 
 WORK_DIR = os.path.join(ROOT_DIR, "work")
 SOURCES_DIR = os.path.join(WORK_DIR, "sources")
 BUILD_DIR = os.path.join(WORK_DIR, "build")
 BIN_DIR = os.path.join(ROOT_DIR, "bin")
+
+
+async def subprocess(args: list[str], cwd: str | None = None) -> None:
+    if cwd is None:
+        cwd = os.getcwd()
+
+    process = await asyncio.create_subprocess_exec(
+        *args,
+        cwd=cwd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    stdout, stderr = await process.communicate()
+
+    for line in stdout.decode().splitlines():
+        print(f"[stdout] {line}")
+    for line in stderr.decode().splitlines():
+        print(f"[stderr] {line}")
 
 
 def setup() -> None:
@@ -30,23 +51,23 @@ def setup() -> None:
     os.makedirs(BIN_DIR, mode=0o777, exist_ok=True)
 
 
-def fetch_package(package: PackageInfo) -> None:
-    package_dir = os.path.join(SOURCES_DIR, package["PackageBase"])
+async def fetch_base(name: str) -> None:
+    package_dir = os.path.join(SOURCES_DIR, name)
     os.makedirs(package_dir, exist_ok=True)
 
     if os.path.exists(os.path.join(package_dir, ".git")):
-        subprocess.run(["git", "pull"], cwd=package_dir, check=True)
+        await subprocess(["git", "pull"], cwd=package_dir)
     else:
-        git_url = f"https://aur.archlinux.org/{package['PackageBase']}.git"
-        subprocess.run(["git", "clone", git_url, package_dir], check=True)
+        git_url = f"https://aur.archlinux.org/{name}.git"
+        await subprocess(["git", "clone", git_url, package_dir])
         os.chmod(package_dir, 0o777)
 
 
-def build_package(package: PackageInfo) -> None:
-    fetch_package(package)
+async def build_base(base: Base) -> None:
+    await fetch_base(base.name)
 
-    build_base_dir = os.path.join(BUILD_DIR, package["PackageBase"])
-    source_base_dir = os.path.join(SOURCES_DIR, package["PackageBase"])
+    build_base_dir = os.path.join(BUILD_DIR, base.name)
+    source_base_dir = os.path.join(SOURCES_DIR, base.name)
 
     shutil.rmtree(build_base_dir, ignore_errors=True)
 
@@ -68,7 +89,7 @@ def build_package(package: PackageInfo) -> None:
     command = f"""
         {remove_orphans} &&
 
-        cd ~/work/build/{package["PackageBase"]} &&
+        cd ~/work/build/{base.name} &&
 
         source PKGBUILD &&
         if [ ! -z "${{validpgpkeys}}" ]; then
@@ -100,10 +121,32 @@ def build_package(package: PackageInfo) -> None:
         ):
             break
 
-        time.sleep(0.01)
+        await asyncio.sleep(0.01)
 
-    filename = f"{package['PackageBase']}-{package['Version']}-x86_64.pkg.tar.lz"
-    shutil.move(
-        os.path.join(build_base_dir, filename),
-        os.path.join(BIN_DIR, filename),
-    )
+    packages = await db.get_packages_from_base_name(base.name)
+    for package in packages:
+        arch: Literal["x86_64"] | Literal["any"]
+
+        extension = ".pkg.tar.lz"
+
+        if os.path.exists(
+            os.path.join(
+                build_base_dir, f"{package.name}-{base.version}-x86_64{extension}"
+            )
+        ):
+            arch = "x86_64"
+        elif os.path.exists(
+            os.path.join(
+                build_base_dir, f"{package.name}-{base.version}-any{extension}"
+            )
+        ):
+            arch = "any"
+        else:
+            raise Exception(f"Package {package.name} not found in build directory")
+
+        shutil.move(
+            os.path.join(
+                build_base_dir, f"{package.name}-{base.version}-{arch}{extension}"
+            ),
+            os.path.join(BIN_DIR, f"{package.name}-{base.version}-{arch}{extension}"),
+        )
